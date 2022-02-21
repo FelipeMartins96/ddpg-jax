@@ -1,6 +1,5 @@
 import gym.spaces as spaces
 import numpy as np
-import torch
 
 class ReplayBuffer:
     """Circular replay buffer for gym environments transitions"""

@@ -107,13 +107,14 @@ class DDPG:
 
         self._sample_action = get_sample_action(self.actor, 0.2)
         self._update = get_update(self.actor, self.critic, optimizer, gamma, 0.005)
+        self._get_action = jax.jit(self.actor.apply)
 
     def sample_action(self, obs):
         self.key, action = self._sample_action(self.key, self.actor_params, obs)
         return action
 
     def get_action(self, obs):
-        return self.actor.apply(self.actor_params, obs)
+        return self._get_action(self.actor_params, obs)
 
     def update(self, batch):
         obs, acts, rws, dones, next_obs = batch
