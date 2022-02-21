@@ -35,8 +35,8 @@ def get_update(act_model, crt_model, optimizer, gamma, tau):
         loss = jnp.mean(loss)
         return loss
 
-    crt_loss_grad = jax.grad(critic_loss)
-    act_loss_grad = jax.grad(actor_loss)
+    crt_loss_grad = jax.value_and_grad(critic_loss)
+    act_loss_grad = jax.value_and_grad(actor_loss)
 
     def update(
         act_params,
@@ -51,17 +51,17 @@ def get_update(act_model, crt_model, optimizer, gamma, tau):
         dones,
         next_obs,
     ):
+        # update actor
+        act_loss, act_grad = act_loss_grad(act_params, crt_params, obs)
+        updates, new_act_opt_params = optimizer.update(act_grad, act_opt_params)
+        new_act_params = optax.apply_updates(act_params, updates)
+
         # update critic
-        critic_grad = crt_loss_grad(
+        crt_loss, critic_grad = crt_loss_grad(
             crt_params, tgt_act_params, tgt_crt_params, obs, acts, rws, dones, next_obs
         )
         updates, new_crt_opt_params = optimizer.update(critic_grad, crt_opt_params)
         new_crt_params = optax.apply_updates(crt_params, updates)
-
-        # update actor
-        act_grad = act_loss_grad(act_params, crt_params, obs)
-        updates, new_act_opt_params = optimizer.update(act_grad, act_opt_params)
-        new_act_params = optax.apply_updates(act_params, updates)
 
         # sync networks
         new_tgt_act_params = jax.tree_multimap(
@@ -78,7 +78,7 @@ def get_update(act_model, crt_model, optimizer, gamma, tau):
             new_tgt_crt_params,
             new_act_opt_params,
             new_crt_opt_params,
-        )
+        ), (act_loss, crt_loss)
 
     return jax.jit(update)
 
@@ -126,7 +126,7 @@ class DDPG:
             self.tgt_critic_params,
             self.act_opt_params,
             self.crt_opt_params,
-        ) = self._update(
+        ), (act_loss, crt_loss) = self._update(
             self.actor_params,
             self.critic_params,
             self.tgt_actor_params,
@@ -139,3 +139,5 @@ class DDPG:
             dones,
             next_obs,
         )
+
+        return act_loss, crt_loss
