@@ -30,9 +30,9 @@ def run_validation_ep(m_agent, w_agent, env, opponent_policies):
     m_obs = env.reset()
     done = False
     while not done:
-        m_action = m_agent.policy_fn(m_agent.policy_params, m_obs)
+        m_action = m_agent.get_action(m_obs)
         w_obs = env.set_action_m(m_action)
-        w_action = w_agent.policy_fn(w_agent.policy_params, w_obs)
+        w_action = w_agent.get_action(w_obs)
         step_action = np.concatenate(
             [w_action] + [[p()] for p in opponent_policies], axis=0
         )
