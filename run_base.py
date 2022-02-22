@@ -108,8 +108,8 @@ def main(args):
         if step >= min_replay_size:
             batch = buffer.get_batch(batch_size)
             act_loss, crt_loss = agent.update(batch)
-            q_losses.append(act_loss)
-            pi_losses.append(crt_loss)
+            pi_losses.append(act_loss)
+            q_losses.append(crt_loss)
 
             if done:
                 log = info_to_log(info)
