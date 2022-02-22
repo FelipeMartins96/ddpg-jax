@@ -1,16 +1,17 @@
 import time
 from argparse import ArgumentParser
-from tqdm import tqdm
+
 import gym
-import numpy as np
-
-from buffer import ReplayBuffer
-from agent import DDPG
-
 import jax
-import wandb
+import numpy as np
+import pyvirtualdisplay
 import rsoccer_gym
+import wandb
 from flax.training import checkpoints
+from tqdm import tqdm
+
+from agent import DDPG
+from buffer import ReplayBuffer
 
 
 def info_to_log(info):
@@ -136,6 +137,9 @@ def main(args):
 
 
 if __name__ == '__main__':
+    # Creates a virtual display for OpenAI gym
+    pyvirtualdisplay.Display(visible=0, size=(1400, 900)).start()
+    
     parser = ArgumentParser(fromfile_prefix_chars='@')
     # RANDOM
     parser.add_argument('--seed', type=int, default=0)
