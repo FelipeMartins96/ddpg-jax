@@ -31,6 +31,7 @@ def run_validation_ep(agent, env, opponent_policies):
     done = False
     while not done:
         action = agent.get_action(obs)
+        action = np.array(action.reshape((-1,2)))
         step_action = np.concatenate(
             [action] + [[p()] for p in opponent_policies], axis=0
         )
@@ -99,7 +100,10 @@ def main(args):
             run_validation_ep(agent, val_env, opponent_policies)
 
         action = np.array(agent.sample_action(obs))
-        _obs, reward, done, info = env.step(action)
+        step_action = np.concatenate(
+            [action.reshape((-1,2))] + [[p()] for p in opponent_policies], axis=0
+        )
+        _obs, reward, done, info = env.step(step_action)
         terminal_state = False if not done or "TimeLimit.truncated" in info else True
         buffer.add(obs, action, 0.0, reward.manager, terminal_state, _obs.manager)
 
