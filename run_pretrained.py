@@ -61,7 +61,6 @@ def main(args):
         args.env_name,
         n_robots_blue=args.env_n_robots_blue,
         n_robots_yellow=args.env_n_robots_yellow,
-        pre_training=True,
     )
     if args.training_val_frequency:
         val_env = gym.wrappers.RecordVideo(
@@ -69,7 +68,6 @@ def main(args):
                 args.env_name,
                 n_robots_blue=args.env_n_robots_blue,
                 n_robots_yellow=args.env_n_robots_yellow,
-                pre_training=True,
             ),
             './monitor/',
             episode_trigger=lambda x: True,
