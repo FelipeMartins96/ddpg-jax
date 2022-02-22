@@ -139,7 +139,7 @@ def main(args):
 
 if __name__ == '__main__':
     # Creates a virtual display for OpenAI gym
-    # pyvirtualdisplay.Display(visible=0, size=(1400, 900)).start()
+    pyvirtualdisplay.Display(visible=0, size=(1400, 900)).start()
 
     parser = ArgumentParser(fromfile_prefix_chars='@')
     # RANDOM
@@ -159,7 +159,7 @@ if __name__ == '__main__':
     parser.add_argument('--env-opponent-policy', type=str, default='off')
 
     # TRAINING
-    parser.add_argument('--training-total-steps', type=int, default=5000000)
+    parser.add_argument('--training-total-steps', type=int, default=2500000)
     parser.add_argument('--training-replay-min-size', type=int, default=100000)
     parser.add_argument('--training-batch-size', type=int, default=256)
     parser.add_argument('--training-gamma', type=float, default=0.95)
