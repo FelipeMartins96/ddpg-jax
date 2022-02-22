@@ -18,11 +18,11 @@ def info_to_log(info):
     return {
         'manager/goal': info['manager_weighted_rw'][0],
         'manager/ball_grad': info['manager_weighted_rw'][1],
-        'manager/move': info['manager_weighted_rw'][2],
-        'manager/collision': info['manager_weighted_rw'][3],
-        'manager/energy': info['manager_weighted_rw'][4],
-        'worker/dist': info['workers_weighted_rw'][0][0],
-        'worker/energy': info['workers_weighted_rw'][0][1],
+        # 'manager/move': info['manager_weighted_rw'][2],
+        # 'manager/collision': info['manager_weighted_rw'][3],
+        # 'manager/energy': info['manager_weighted_rw'][4],
+        # 'worker/dist': info['workers_weighted_rw'][0][0],
+        # 'worker/energy': info['workers_weighted_rw'][0][1],
     }
 
 
@@ -122,11 +122,12 @@ def main(args):
                     }
                 )
                 wandb.log(log, step=step)
-                rewards, ep_steps, q_losses, pi_losses = 0, 0, [], []
+                q_losses, pi_losses = [], []
 
         obs = _obs.manager
         if done:
             obs = env.reset()
+            rewards, ep_steps = 0, 0
 
     checkpoints.save_checkpoint(
         f'./checkpoints/{args.wandb_name}',
@@ -139,7 +140,7 @@ def main(args):
 if __name__ == '__main__':
     # Creates a virtual display for OpenAI gym
     pyvirtualdisplay.Display(visible=0, size=(1400, 900)).start()
-    
+
     parser = ArgumentParser(fromfile_prefix_chars='@')
     # RANDOM
     parser.add_argument('--seed', type=int, default=0)
