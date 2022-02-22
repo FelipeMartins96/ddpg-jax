@@ -76,7 +76,7 @@ def main(args):
             lambda: np.array([0.0, 0.0]) for _ in range(args.env_n_robots_yellow)
         ]
     env.set_key(key)
-    val_env.set_key(key)
+    val_env.set_key(key) if args.training_val_frequency else None
 
     m_observation_space, m_action_space = env.get_spaces_m()
     w_observation_space, w_action_space = env.get_spaces_w()
