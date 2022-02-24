@@ -144,6 +144,10 @@ if __name__ == '__main__':
     pyvirtualdisplay.Display(visible=0, size=(1400, 900)).start()
 
     parser = ArgumentParser(fromfile_prefix_chars='@')
+
+    # EXPERIMENT
+    parser.add_argument('--experiment-type', type=str, default='not-set')
+    
     # RANDOM
     parser.add_argument('--seed', type=int, default=0)
 
