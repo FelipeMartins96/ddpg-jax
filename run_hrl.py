@@ -147,13 +147,13 @@ def main(args):
             rewards, ep_steps = 0, 0
 
     checkpoints.save_checkpoint(
-        f'./checkpoints/m_{args.wandb_name}',
+        f'./checkpoints/m_{args.env_name}/{args.wandb_name}',
         m_agent.actor_params,
         step=total_training_steps,
         overwrite=True,
     )
     checkpoints.save_checkpoint(
-        f'./checkpoints/w_{args.wandb_name}',
+        f'./checkpoints/w_{args.env_name}/{args.wandb_name}',
         w_agent.actor_params,
         step=total_training_steps,
         overwrite=True,

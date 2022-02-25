@@ -86,7 +86,7 @@ def main(args):
     m_agent = DDPG(m_observation_space, m_action_space, learning_rate, gamma, seed)
     w_agent = DDPG(w_observation_space, w_action_space, learning_rate, gamma, seed)
     w_agent.actor_params = checkpoints.restore_checkpoint(
-        './checkpoints/pretraining-worker', w_agent.actor_params
+        f'./checkpoints/{args.env_name}/pretraining-worker', w_agent.actor_params
     )
     m_buffer = ReplayBuffer(m_observation_space, m_action_space, replay_capacity)
 
@@ -135,7 +135,7 @@ def main(args):
             rewards, ep_steps = 0, 0
 
     checkpoints.save_checkpoint(
-        f'./checkpoints/{args.wandb_name}',
+        f'./checkpoints/{args.env_name}/{args.wandb_name}',
         m_agent.actor_params,
         step=total_training_steps,
         overwrite=True,
