@@ -18,9 +18,9 @@ def info_to_log(info):
     return {
         'manager/goal': info['manager_weighted_rw'][0],
         'manager/ball_grad': info['manager_weighted_rw'][1],
-        # 'manager/move': info['manager_weighted_rw'][2],
+        'manager/move': info['manager_weighted_rw'][2],
         # 'manager/collision': info['manager_weighted_rw'][3],
-        # 'manager/energy': info['manager_weighted_rw'][4],
+        'manager/energy': info['manager_weighted_rw'][4],
         # 'worker/dist': info['workers_weighted_rw'][0][0],
         # 'worker/energy': info['workers_weighted_rw'][0][1],
     }
