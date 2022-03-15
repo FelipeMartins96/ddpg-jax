@@ -110,28 +110,22 @@ def main(args):
         rewards += reward.manager
         ep_steps += 1
         if step >= min_replay_size:
-            batch = buffer.get_batch(batch_size)
-            act_loss, crt_loss = agent.update(batch)
-            pi_losses.append(act_loss)
-            q_losses.append(crt_loss)
-
-            if done:
-                log = info_to_log(info)
-                log.update(
-                    {
-                        'ep_reward': rewards,
-                        'ep_steps': ep_steps,
-                        'q_loss': sum(q_losses) / len(q_losses),
-                        'pi_loss': sum(pi_losses) / len(pi_losses),
-                    }
-                )
-                wandb.log(log, step=step)
-                q_losses, pi_losses = [], []
+            if step % args.exp_grad_ratio == 0:
+                batch = buffer.get_batch(batch_size)
+                act_loss, crt_loss = agent.update(batch)
+                pi_losses.append(act_loss)
+                q_losses.append(crt_loss)
 
         obs = _obs.manager
         if done:
+            log = info_to_log(info)
+            log.update(dict(ep_reward=rewards, ep_steps=ep_steps))
+            if len(q_losses):
+                log.update(q_loss=sum(q_losses) / len(q_losses), pi_loss=sum(pi_losses) / len(pi_losses))
+            wandb.log(log, step=step)
+            
             obs = env.reset()
-            rewards, ep_steps = 0, 0
+            rewards, ep_steps, q_losses, pi_losses = 0, 0, [], []
 
     checkpoints.save_checkpoint(
         f'./checkpoints/{args.env_name}/{args.wandb_name}',
@@ -174,6 +168,7 @@ if __name__ == '__main__':
     parser.add_argument('--training-learning-rate', type=float, default=1e-4)
     parser.add_argument('--training-val-frequency', type=int, default=250000)
     parser.add_argument('--training-load-worker', type=bool, default=True)
+    parser.add_argument('--training-exp-grad-ratio', type=int, default=1)
 
     args = parser.parse_args()
     main(args)
