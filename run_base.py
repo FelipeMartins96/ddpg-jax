@@ -48,7 +48,7 @@ def main(args):
         monitor_gym=args.wandb_monitor_gym,
         config=args,
     )
-    total_training_steps = args.training_total_steps + args.training_replay_min_size
+    total_training_steps = (args.training_total_steps * args.training_exp_grad_ratio) + args.training_replay_min_size
     replay_capacity = args.training_total_steps + args.training_replay_min_size
     min_replay_size = args.training_replay_min_size
     batch_size = args.training_batch_size
@@ -76,7 +76,7 @@ def main(args):
     key = jax.random.PRNGKey(seed)
     if args.env_opponent_policy == 'off':
         opponent_policies = [
-            lambda: np.array([0.0, 0.0]) for _ in range(args.env_n_robots_yellow)
+            lambda: np.array([0.0, 0.0]) for _ in range(5)
         ]
     env.set_key(key)
     val_env.set_key(key) if args.training_val_frequency else None
@@ -86,7 +86,7 @@ def main(args):
     w_action_space = gym.spaces.Box(
         low=-1,
         high=1,
-        shape=((args.env_n_robots_blue) * 2,),
+        shape=(2,),
         dtype=np.float32,
     )
 
@@ -94,9 +94,9 @@ def main(args):
     buffer = ReplayBuffer(m_observation_space, w_action_space, replay_capacity)
 
     obs = env.reset()
-    rewards, ep_steps, done, q_losses, pi_losses = 0, 0, False, [], []
+    rewards, ep_steps, n_grads, done, q_losses, pi_losses = 0, 0, 0, False, [], []
     for step in tqdm(range(total_training_steps), smoothing=0.01):
-        if args.training_val_frequency and step % args.training_val_frequency == 0:
+        if args.training_val_frequency and step % (args.training_val_frequency * args.training_exp_grad_ratio) == 0:
             run_validation_ep(agent, val_env, opponent_policies)
 
         action = np.array(agent.sample_action(obs))
@@ -110,20 +110,20 @@ def main(args):
         rewards += reward.manager
         ep_steps += 1
         if step >= min_replay_size:
-            if step % args.exp_grad_ratio == 0:
+            if step % args.training_exp_grad_ratio == 0:
                 batch = buffer.get_batch(batch_size)
                 act_loss, crt_loss = agent.update(batch)
                 pi_losses.append(act_loss)
                 q_losses.append(crt_loss)
+                n_grads += 1
 
         obs = _obs.manager
         if done:
             log = info_to_log(info)
             log.update(dict(ep_reward=rewards, ep_steps=ep_steps))
             if len(q_losses):
-                log.update(q_loss=sum(q_losses) / len(q_losses), pi_loss=sum(pi_losses) / len(pi_losses))
+                log.update(q_loss=sum(q_losses) / len(q_losses), pi_loss=sum(pi_losses) / len(pi_losses), n_grads=n_grads)
             wandb.log(log, step=step)
-            
             obs = env.reset()
             rewards, ep_steps, q_losses, pi_losses = 0, 0, [], []
 
