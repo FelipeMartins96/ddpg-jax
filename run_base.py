@@ -53,7 +53,8 @@ def main(args):
     min_replay_size = args.training_replay_min_size
     batch_size = args.training_batch_size
     gamma = args.training_gamma
-    learning_rate = args.training_learning_rate
+    learning_rate_actor = args.training_learning_rate_actor
+    learning_rate_critic = args.training_learning_rate_critic
     seed = args.seed
 
     env = gym.make(
