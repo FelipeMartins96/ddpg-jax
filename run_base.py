@@ -90,7 +90,7 @@ def main(args):
         dtype=np.float32,
     )
 
-    agent = DDPG(m_observation_space, w_action_space, learning_rate, gamma, seed)
+    agent = DDPG(m_observation_space, w_action_space, learning_rate_actor, learning_rate_critic, gamma, seed)
     buffer = ReplayBuffer(m_observation_space, w_action_space, replay_capacity)
 
     obs = env.reset()
@@ -167,7 +167,8 @@ if __name__ == '__main__':
     parser.add_argument('--training-replay-min-size', type=int, default=100000)
     parser.add_argument('--training-batch-size', type=int, default=256)
     parser.add_argument('--training-gamma', type=float, default=0.95)
-    parser.add_argument('--training-learning-rate', type=float, default=1e-4)
+    parser.add_argument('--training-learning-rate-actor', type=float, default=1e-4)
+    parser.add_argument('--training-learning-rate-critic', type=float, default=1e-4)
     parser.add_argument('--training-val-frequency', type=int, default=250000)
     parser.add_argument('--training-load-worker', type=bool, default=True)
     parser.add_argument('--training-exp-grad-ratio', type=int, default=1)

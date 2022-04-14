@@ -15,7 +15,7 @@ def get_sample_action(act_model, sigma):
     return jax.jit(sample)
 
 
-def get_update(act_model, crt_model, optimizer, gamma, tau):
+def get_update(act_model, crt_model, optimizer_a, optimizer_c, gamma, tau):
     def critic_loss(
         crt_params, tgt_act_params, tgt_crt_params, obs, acts, rws, dones, next_obs
     ):
@@ -53,14 +53,14 @@ def get_update(act_model, crt_model, optimizer, gamma, tau):
     ):
         # update actor
         act_loss, act_grad = act_loss_grad(act_params, crt_params, obs)
-        updates, new_act_opt_params = optimizer.update(act_grad, act_opt_params)
+        updates, new_act_opt_params = optimizer_a.update(act_grad, act_opt_params)
         new_act_params = optax.apply_updates(act_params, updates)
 
         # update critic
         crt_loss, critic_grad = crt_loss_grad(
             crt_params, tgt_act_params, tgt_crt_params, obs, acts, rws, dones, next_obs
         )
-        updates, new_crt_opt_params = optimizer.update(critic_grad, crt_opt_params)
+        updates, new_crt_opt_params = optimizer_c.update(critic_grad, crt_opt_params)
         new_crt_params = optax.apply_updates(crt_params, updates)
 
         # sync networks
@@ -84,7 +84,7 @@ def get_update(act_model, crt_model, optimizer, gamma, tau):
 
 
 class DDPG:
-    def __init__(self, obs_space, act_space, lr, gamma, seed):
+    def __init__(self, obs_space, act_space, lr_c, lr_a, gamma, seed):
         self.key = jax.random.PRNGKey(seed)
         self.key, k0, k1 = jax.random.split(self.key, 3)
         act_size = act_space.shape[0]
@@ -98,15 +98,19 @@ class DDPG:
         self.tgt_critic_params = self.critic_params
 
         # Optimizers
-        optimizer = optax.chain(
+        optimizer_c = optax.chain(
             optax.scale_by_adam(),
-            optax.scale(-lr),
+            optax.scale(-lr_c),
         )
-        self.act_opt_params = optimizer.init(self.actor_params)
-        self.crt_opt_params = optimizer.init(self.critic_params)
+        optimizer_a = optax.chain(
+            optax.scale_by_adam(),
+            optax.scale(-lr_a),
+        )
+        self.act_opt_params = optimizer_c.init(self.actor_params)
+        self.crt_opt_params = optimizer_a.init(self.critic_params)
 
         self._sample_action = get_sample_action(self.actor, 0.2)
-        self._update = get_update(self.actor, self.critic, optimizer, gamma, 0.005)
+        self._update = get_update(self.actor, self.critic, optimizer_c, optimizer_a, gamma, 0.005)
         self._get_action = jax.jit(self.actor.apply)
 
     def sample_action(self, obs):
