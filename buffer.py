@@ -31,7 +31,7 @@ class ReplayBuffer:
             (capacity, *observation_shape), dtype=np.float32
         )
 
-    def add(self, observation, action, logprob, reward, done, next_observation):
+    def add(self, observation, action, reward, done, next_observation):
         """Add a transition to the buffer."""
         self._observations[self._index] = observation
         self._actions[self._index] = action

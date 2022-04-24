@@ -1,0 +1,1 @@
+python hrl_self.py --wandb-mode online --wandb-project vss-baguncinha-selfhrl --wandb-entity robocin --training-batch-size 64 
