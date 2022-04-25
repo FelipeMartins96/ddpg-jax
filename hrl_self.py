@@ -82,7 +82,7 @@ def main(args):
     env = gym.make(args.env_name)
     val_env = (
         gym.wrappers.RecordVideo(
-            gym.make(args.env_name), './monitor/', episode_trigger=lambda x: True
+            gym.make(args.env_name), './monitor/', episode_trigger=lambda x: x % 10 == 0
         )
         if args.training_val_frequency
         else None
@@ -215,7 +215,7 @@ if __name__ == '__main__':
     parser.add_argument('--training-gamma-worker', type=float, default=0.95)
     parser.add_argument('--training-lr-critic', type=float, default=2e-4)
     parser.add_argument('--training-lr-actor', type=float, default=1e-4)
-    parser.add_argument('--training-val-frequency', type=int, default=250000)
+    parser.add_argument('--training-val-frequency', type=int, default=10000)
     parser.add_argument('--training-steps-grad-ratio', type=int, default=10)
     parser.add_argument('--training-noise-sigma-manager', type=float, default=0.5)
     parser.add_argument('--training-noise-sigma-worker', type=float, default=0.2)
