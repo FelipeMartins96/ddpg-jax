@@ -26,18 +26,19 @@ def info_to_log(info):
     }
 
 
-def run_validation_ep(m_agent, w_agent, env):
+def run_validation_ep(m_agent, w_agent, env, n_controlled_robots):
     m_obs = env.reset()
     done = False
     ep_rw = 0
     ep_steps = 0
     while not done:
         m_action = m_agent.get_action(m_obs[0])
-        m_action = np.concatenate([m_action, [2.0] * 6])
+        m_action = np.concatenate([m_action, [2.0] * 2*n_controlled_robots])
         w_obs = env.set_action_m(m_action)
-        w_action = w_agent.get_action(w_obs[3:])
-        w_action = np.concatenate([w_action, np.zeros((3, 2))])
-        _obs, rw, done, info = env.step(w_action)
+        w_action = w_agent.get_action(w_obs[n_controlled_robots:])
+        step_action = np.zeros((6,2))
+        step_action[:n_controlled_robots] = w_action[:n_controlled_robots]
+        _obs, rw, done, info = env.step(step_action)
         ep_rw += rw.manager[0]
         ep_steps += 1
         m_obs = _obs.manager
@@ -124,7 +125,7 @@ def main(args):
         buffering = step < min_replay_size
 
         if val_frequency and not buffering and step % val_frequency == 0:
-            run_validation_ep(m_agent, w_agent, val_env)
+            run_validation_ep(m_agent, w_agent, val_env, n_controlled_robots)
             checkpoints.save_checkpoint(
                 f'./checkpoints/m_{args.env_name}/{args.wandb_name}',
                 m_agent.actor_params,
