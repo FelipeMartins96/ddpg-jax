@@ -76,13 +76,15 @@ def main(args):
     sigma_m = args.training_noise_sigma_manager
     sigma_w = args.training_noise_sigma_worker
 
+    n_controlled_robots = args.training_n_controlled_robots
+
     seed = args.seed
     val_frequency = args.training_val_frequency * step_ratio
 
-    env = gym.make(args.env_name)
+    env = gym.make(args.env_name, n_controlled_robots=n_controlled_robots)
     val_env = (
         gym.wrappers.RecordVideo(
-            gym.make(args.env_name), './monitor/', episode_trigger=lambda x: x % 10 == 0
+            gym.make(args.env_name, n_controlled_robots=n_controlled_robots), './monitor/', episode_trigger=lambda x: x % 10 == 0
         )
         if args.training_val_frequency
         else None
@@ -108,12 +110,12 @@ def main(args):
     @jax.jit
     def random_m_action(k):
         k1, k2 = jax.random.split(k, 2)
-        return k1, jax.random.uniform(k2, shape=(2, 6))
+        return k1, jax.random.uniform(k2, shape=(2, 2*n_controlled_robots))
 
     @jax.jit
     def random_w_action(k):
         k1, k2 = jax.random.split(k, 2)
-        return k1, jax.random.uniform(k2, shape=(6, 2))
+        return k1, jax.random.uniform(k2, shape=(2*n_controlled_robots, 2))
 
     m_obs = env.reset()
     ep_steps = 0
@@ -146,14 +148,17 @@ def main(args):
             m_action = np.array(m_agent.sample_action(m_obs))
             w_obs = env.set_action_m(m_action)
             w_actions = np.array(w_agent.sample_action(w_obs))
-
-        _obs, rws, done, info = env.step(w_actions)
-
+        
+        step_action = np.zeros((6,2))
+        step_action[:n_controlled_robots] = w_actions[:n_controlled_robots]
+        step_action[3:3+n_controlled_robots] = w_actions[-n_controlled_robots:]
+        _obs, rws, done, info = env.step(step_action)
+ 
         ts = False if not done or "TimeLimit.truncated" in info else True
 
         for i in range(2):
             m_buffer.add(m_obs[i], m_action[i], rws.manager[i], ts, _obs.manager[i])
-        for i in range(6):
+        for i in range(2 * n_controlled_robots):
             w_buffer.add(w_obs[i], w_actions[i], rws.workers[i], ts, _obs.workers[i])
 
         ep_steps += 1
@@ -208,6 +213,7 @@ if __name__ == '__main__':
     parser.add_argument('--env-name', type=str, default='VSSHRLSelf-v0')
 
     # TRAINING
+    parser.add_argument('--training-n-controlled-robots', type=int, default=3)
     parser.add_argument('--training-grad-steps', type=int, default=5000000)
     parser.add_argument('--training-replay-min-size', type=int, default=250000)
     parser.add_argument('--training-batch-size', type=int, default=64)
