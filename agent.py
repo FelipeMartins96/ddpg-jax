@@ -84,7 +84,7 @@ def get_update(act_model, crt_model, optimizer_a, optimizer_c, gamma, tau):
 
 
 class DDPG:
-    def __init__(self, obs_space, act_space, lr_c, lr_a, gamma, seed):
+    def __init__(self, obs_space, act_space, lr_c, lr_a, gamma, seed, sigma):
         self.key = jax.random.PRNGKey(seed)
         self.key, k0, k1 = jax.random.split(self.key, 3)
         act_size = act_space.shape[0]
@@ -96,6 +96,7 @@ class DDPG:
         )
         self.tgt_actor_params = self.actor_params
         self.tgt_critic_params = self.critic_params
+        self.sigma = sigma
 
         # Optimizers
         optimizer_c = optax.chain(
@@ -109,7 +110,7 @@ class DDPG:
         self.act_opt_params = optimizer_c.init(self.actor_params)
         self.crt_opt_params = optimizer_a.init(self.critic_params)
 
-        self._sample_action = get_sample_action(self.actor, 0.2)
+        self._sample_action = get_sample_action(self.actor, self.sigma)
         self._update = get_update(self.actor, self.critic, optimizer_c, optimizer_a, gamma, 0.005)
         self._get_action = jax.jit(self.actor.apply)
 

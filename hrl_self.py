@@ -1,5 +1,8 @@
 import time
 from argparse import ArgumentParser
+import os
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 import gym
 import jax
@@ -70,6 +73,9 @@ def main(args):
     lr_actor = args.training_lr_actor
     gamma_m = args.training_gamma_manager
     gamma_w = args.training_gamma_worker
+    sigma_m = args.training_noise_sigma_manager
+    sigma_w = args.training_noise_sigma_worker
+
     seed = args.seed
     val_frequency = args.training_val_frequency * step_ratio
 
@@ -90,10 +96,10 @@ def main(args):
     w_observation_space, w_action_space = env.get_spaces_w()
 
     m_agent = DDPG(
-        m_observation_space, m_action_space, lr_critic, lr_actor, gamma_m, seed
+        m_observation_space, m_action_space, lr_critic, lr_actor, gamma_m, seed, sigma_m
     )
     w_agent = DDPG(
-        w_observation_space, w_action_space, lr_critic, lr_actor, gamma_w, seed
+        w_observation_space, w_action_space, lr_critic, lr_actor, gamma_w, seed, sigma_w
     )
 
     m_buffer = ReplayBuffer(m_observation_space, m_action_space, replay_capacity)
@@ -205,12 +211,14 @@ if __name__ == '__main__':
     parser.add_argument('--training-grad-steps', type=int, default=5000000)
     parser.add_argument('--training-replay-min-size', type=int, default=250000)
     parser.add_argument('--training-batch-size', type=int, default=64)
-    parser.add_argument('--training-gamma-manager', type=float, default=0.95)
+    parser.add_argument('--training-gamma-manager', type=float, default=0.99)
     parser.add_argument('--training-gamma-worker', type=float, default=0.95)
     parser.add_argument('--training-lr-critic', type=float, default=2e-4)
     parser.add_argument('--training-lr-actor', type=float, default=1e-4)
     parser.add_argument('--training-val-frequency', type=int, default=250000)
     parser.add_argument('--training-steps-grad-ratio', type=int, default=10)
+    parser.add_argument('--training-noise-sigma-manager', type=float, default=0.5)
+    parser.add_argument('--training-noise-sigma-worker', type=float, default=0.2)
 
     args = parser.parse_args()
     main(args)
