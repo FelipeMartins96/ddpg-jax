@@ -48,7 +48,7 @@ def run_validation_ep(m_agent, w_agent, env, n_controlled_robots):
             'validation/m_blue_rw': info['blue_manager_weighted_rw'].sum(),
             'validation/m_blue_goal': info['blue_manager_weighted_rw'][0],
             'validation/m_blue_ball_grad': info['blue_manager_weighted_rw'][1],
-            'validation/w_mean_dist': info['workers_weighted_rw'][:3].mean(axis=0)[0],
+            'validation/w_mean_dist': info['workers_weighted_rw'][:n_controlled_robots].mean(axis=0)[0],
         },
         commit=False,
     )
@@ -77,6 +77,10 @@ def main(args):
     sigma_m = args.training_noise_sigma_manager
     sigma_w = args.training_noise_sigma_worker
 
+    w_checkpoint = args.training_worker_checkpoint
+    train_w = args.training_train_worker
+    train_m = args.training_train_manager
+
     n_controlled_robots = args.training_n_controlled_robots
 
     seed = args.seed
@@ -85,7 +89,7 @@ def main(args):
     env = gym.make(args.env_name, n_controlled_robots=n_controlled_robots)
     val_env = (
         gym.wrappers.RecordVideo(
-            gym.make(args.env_name, n_controlled_robots=n_controlled_robots), './monitor/', episode_trigger=lambda x: x % 10 == 0
+            gym.make(args.env_name, n_controlled_robots=n_controlled_robots), './monitor/', episode_trigger=lambda x: True
         )
         if args.training_val_frequency
         else None
@@ -104,9 +108,13 @@ def main(args):
     w_agent = DDPG(
         w_observation_space, w_action_space, lr_critic, lr_actor, gamma_w, seed, sigma_w
     )
+    if w_checkpoint:
+        w_agent.actor_params = checkpoints.restore_checkpoint(
+            w_checkpoint, w_agent.actor_params
+        )
 
-    m_buffer = ReplayBuffer(m_observation_space, m_action_space, replay_capacity)
-    w_buffer = ReplayBuffer(w_observation_space, w_action_space, replay_capacity)
+    m_buffer = ReplayBuffer(m_observation_space, m_action_space, replay_capacity) if train_m else None
+    w_buffer = ReplayBuffer(w_observation_space, w_action_space, replay_capacity) if train_w else None
 
     @jax.jit
     def random_m_action(k):
@@ -157,27 +165,41 @@ def main(args):
  
         ts = False if not done or "TimeLimit.truncated" in info else True
 
-        for i in range(2):
-            m_buffer.add(m_obs[i], m_action[i], rws.manager[i], ts, _obs.manager[i])
-        for i in range(2 * n_controlled_robots):
-            w_buffer.add(w_obs[i], w_actions[i], rws.workers[i], ts, _obs.workers[i])
+        if train_m:
+            for i in range(2):
+                m_buffer.add(m_obs[i], m_action[i], rws.manager[i], ts, _obs.manager[i])
+        if train_w:
+            for i in range(2 * n_controlled_robots):
+                w_buffer.add(w_obs[i], w_actions[i], rws.workers[i], ts, _obs.workers[i])
 
         ep_steps += 1
 
         if not buffering:
-            pi_loss, q_loss = m_agent.update(m_buffer.get_batch(batch_size))
-            m_pi_losses.append(pi_loss), m_q_losses.append(q_loss)
-            if step % 10 == 0:
-                pi_loss, q_loss = w_agent.update(w_buffer.get_batch(batch_size))
-                w_pi_losses.append(pi_loss), w_q_losses.append(q_loss)
+            if train_m:
+                pi_loss, q_loss = m_agent.update(m_buffer.get_batch(batch_size))
+                m_pi_losses.append(pi_loss), m_q_losses.append(q_loss)
+            if train_w:
+                if step % 10 == 0:
+                    pi_loss, q_loss = w_agent.update(w_buffer.get_batch(batch_size))
+                    w_pi_losses.append(pi_loss), w_q_losses.append(q_loss)
 
             if done:
                 log = info_to_log(info)
                 log.update(
                     {
                         'ep_info/ep_steps': ep_steps,
+                    }
+                )
+                if len(m_q_losses):
+                    log.update(
+                    {
                         'train_info/manager_q_loss': np.mean(m_q_losses),
                         'train_info/manager_pi_loss': np.mean(m_pi_losses),
+                    }
+                )
+                if len(w_q_losses):
+                    log.update(
+                    {
                         'train_info/worker_q_loss': np.mean(w_q_losses),
                         'train_info/worker_pi_loss': np.mean(w_pi_losses),
                     }
@@ -226,6 +248,10 @@ if __name__ == '__main__':
     parser.add_argument('--training-steps-grad-ratio', type=int, default=10)
     parser.add_argument('--training-noise-sigma-manager', type=float, default=0.5)
     parser.add_argument('--training-noise-sigma-worker', type=float, default=0.2)
+    parser.add_argument('--training-worker-checkpoint', type=str, default=None)
+    parser.add_argument('--training-train-worker', type=bool, default=True)
+    parser.add_argument('--training-train-manager', type=bool, default=True)
+
 
     args = parser.parse_args()
     main(args)
