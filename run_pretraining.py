@@ -81,7 +81,7 @@ def main(args):
     m_observation_space, m_action_space = env.get_spaces_m()
     w_observation_space, w_action_space = env.get_spaces_w()
 
-    agent = DDPG(w_observation_space, w_action_space, learning_rate, gamma, seed)
+    agent = DDPG(w_observation_space, w_action_space, learning_rate, learning_rate, gamma, seed, 0.2)
     buffer = ReplayBuffer(w_observation_space, w_action_space, replay_capacity)
 
     key, val_key = jax.random.split(key)
@@ -95,12 +95,19 @@ def main(args):
             val_target = np.array(jax.random.uniform(val_key, m_action_space.shape))
             run_validation_ep(agent, val_env, val_target)
 
+            checkpoints.save_checkpoint(
+                f'./checkpoints/{args.env_name}/{args.wandb_name}',
+                agent.actor_params,
+                step=total_training_steps,
+                overwrite=True,
+            )
+
         w_obs = env.set_action_m(target)[0]
         action = np.array(agent.sample_action(w_obs))
         _obs, reward, done, info = env.step(action)
         terminal_state = False if not done or "TimeLimit.truncated" in info else True
         buffer.add(
-            w_obs, action, 0.0, reward.workers[0], terminal_state, _obs.workers[0]
+            w_obs, action, reward.workers[0], terminal_state, _obs.workers[0]
         )
 
         rewards += reward.workers[0]
@@ -131,12 +138,6 @@ def main(args):
             target = np.array(jax.random.uniform(key, m_action_space.shape))
             rewards, ep_steps = 0, 0
 
-    checkpoints.save_checkpoint(
-        f'./checkpoints/{args.env_name}/{args.wandb_name}',
-        agent.actor_params,
-        step=total_training_steps,
-        overwrite=True,
-    )
 
 
 if __name__ == '__main__':
