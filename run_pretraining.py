@@ -98,7 +98,7 @@ def main(args):
             checkpoints.save_checkpoint(
                 f'./checkpoints/{args.env_name}/{args.wandb_name}',
                 agent.actor_params,
-                step=total_training_steps,
+                step=step,
                 overwrite=True,
             )
 
