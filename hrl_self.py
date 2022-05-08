@@ -33,9 +33,9 @@ def run_validation_ep(m_agent, w_agent, env, n_controlled_robots):
     ep_steps = 0
     while not done:
         m_action = m_agent.get_action(m_obs[0])
-        m_action = np.concatenate([m_action, [2.0] * 2*n_controlled_robots])
+        m_action = np.stack([m_action, [2.0] * 2*n_controlled_robots])
         w_obs = env.set_action_m(m_action)
-        w_action = w_agent.get_action(w_obs[n_controlled_robots:])
+        w_action = w_agent.get_action(w_obs[:n_controlled_robots])
         step_action = np.zeros((6,2))
         step_action[:n_controlled_robots] = w_action[:n_controlled_robots]
         _obs, rw, done, info = env.step(step_action)
@@ -119,12 +119,12 @@ def main(args):
     @jax.jit
     def random_m_action(k):
         k1, k2 = jax.random.split(k, 2)
-        return k1, jax.random.uniform(k2, shape=(2, 2*n_controlled_robots))
+        return k1, jax.random.uniform(k2,minval=-1, maxval=1, shape=(2, 2*n_controlled_robots))
 
     @jax.jit
     def random_w_action(k):
         k1, k2 = jax.random.split(k, 2)
-        return k1, jax.random.uniform(k2, shape=(2*n_controlled_robots, 2))
+        return k1, jax.random.uniform(k2,minval=-1, maxval=1, shape=(2*n_controlled_robots, 2))
 
     m_obs = env.reset()
     ep_steps = 0
@@ -242,14 +242,14 @@ if __name__ == '__main__':
     parser.add_argument('--training-batch-size', type=int, default=64)
     parser.add_argument('--training-gamma-manager', type=float, default=0.99)
     parser.add_argument('--training-gamma-worker', type=float, default=0.95)
-    parser.add_argument('--training-lr-critic', type=float, default=2e-4)
-    parser.add_argument('--training-lr-actor', type=float, default=1e-4)
+    parser.add_argument('--training-lr-critic', type=float, default=9e-5)
+    parser.add_argument('--training-lr-actor', type=float, default=8e-5)
     parser.add_argument('--training-val-frequency', type=int, default=10000)
     parser.add_argument('--training-steps-grad-ratio', type=int, default=10)
     parser.add_argument('--training-noise-sigma-manager', type=float, default=0.5)
     parser.add_argument('--training-noise-sigma-worker', type=float, default=0.2)
     parser.add_argument('--training-worker-checkpoint', type=str, default=None)
-    parser.add_argument('--training-train-worker', type=bool, default=True)
+    parser.add_argument('--training-train-worker', type=bool, default=False)
     parser.add_argument('--training-train-manager', type=bool, default=True)
 
 

@@ -1,5 +1,8 @@
 import time
 from argparse import ArgumentParser
+import os
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 import gym
 import jax
@@ -13,72 +16,68 @@ from tqdm import tqdm
 from agent import DDPG
 from buffer import ReplayBuffer
 
-
-def info_to_log(info):
-    return {
-        'manager/goal': info['manager_weighted_rw'][0],
-        'manager/ball_grad': info['manager_weighted_rw'][1],
-        'manager/move': info['manager_weighted_rw'][2],
-        # 'manager/collision': info['manager_weighted_rw'][3],
-        'manager/energy': info['manager_weighted_rw'][4],
-        # 'worker/dist': info['workers_weighted_rw'][0][0],
-        # 'worker/energy': info['workers_weighted_rw'][0][1],
-    }
+# TODO usar random de jax no validation loop
+# TODO Criar ambiente
+# TODO Criar agents
+# TODO loop de validation ep
 
 
-def run_validation_ep(agent, env, opponent_policies):
-    obs = env.reset()
+def run_validation_ep(m_agent, w_agent, env, n_controlled_robots, key):
+    m_obs = env.reset()
+    # env.render()
     done = False
+    ep_rw = 0
+    ep_steps = 0
+
+    @jax.jit()
+    def random_m_action(k):
+        k1, k2 = jax.random.split(k, 2)
+        return k1, jax.random.uniform(k2,minval=-1, maxval=1, shape=(2, 2*n_controlled_robots))
+
+    @jax.jit()
+    def random_w_action(k):
+        k1, k2 = jax.random.split(k, 2)
+        return k1, jax.random.uniform(k2,minval=-1, maxval=1, shape=(2*3, 2))
+    key, n_k = jax.random.split(key)
+
     while not done:
-        action = agent.get_action(obs)
-        action = np.array(action.reshape((-1, 2)))
-        step_action = np.concatenate(
-            [action] + [[p()] for p in opponent_policies], axis=0
-        )
-        _obs, _, done, _ = env.step(step_action)
-        obs = _obs.manager
+        key, m_action = random_m_action(key)
+        w_obs = env.set_action_m(np.array(m_action))
+        key, w_action = random_w_action(key)
+        _obs, rw, done, info = env.step(np.array(w_action))
+        ep_rw += rw.manager[0]
+        ep_steps += 1
+        m_obs = _obs.manager
 
+        # env.render()
+    return key
 
-def main():
-    n_robots_blue = 1
-    n_robots_yellow = 1
+w_checkpoint = './checkpoints/VSSHRL-v1/pretraining-worker'
+n_controlled_robots = 1
+seed = 0
 
-    env = gym.make(
-        'VSSHRL-v3',
-        n_robots_blue=n_robots_blue,
-        n_robots_yellow=n_robots_yellow,
-        hierarchical=False,
+env = gym.make('VSSHRLSelf-v0', n_controlled_robots=n_controlled_robots)
+
+key = jax.random.PRNGKey(seed)
+env.set_key(key)
+
+m_observation_space, m_action_space = env.get_spaces_m()
+w_observation_space, w_action_space = env.get_spaces_w()
+
+m_agent = DDPG(
+    m_observation_space, m_action_space, 0.1, 0.1, 0.9, seed, 0.2
+)
+w_agent = DDPG(
+    w_observation_space, w_action_space, 0.1, 0.1, 0.9, seed, 0.2
+)
+if w_checkpoint:
+    w_agent.actor_params = checkpoints.restore_checkpoint(
+        w_checkpoint, w_agent.actor_params
     )
-    seed = 0
-    key = jax.random.PRNGKey(seed)
-    opponent_policies = [
-        lambda: np.array([0.0, 0.0]) for _ in range(n_robots_yellow)
-    ]
-    env.set_key(key)
-    m_observation_space, m_action_space = env.get_spaces_m()
-    w_observation_space, w_action_space = env.get_spaces_w()
-    w_action_space = gym.spaces.Box(
-        low=-1, high=1, shape=((n_robots_blue) * 2,), dtype=np.float32
-    )
 
-    # agent = DDPG(m_observation_space, w_action_space, 0.0, 0.0, seed)
+done = False
 
-    obs = env.reset()
-    done = False
-    while not done:
-        env.render()
-        input()
-        # action = np.array(agent.sample_action(obs))
-        action = np.array([1.,1.])
-        # print(action)
-        step_action = np.concatenate(
-            [action.reshape((-1, 2))] + [[p()] for p in opponent_policies], axis=0
-        )
-        _obs, reward, done, info = env.step(step_action)
-        print(step_action)
-        print(info_to_log(info))
-        obs = _obs.manager
-
-
-if __name__ == '__main__':
-    main()
+import time
+a = time.time()
+key = run_validation_ep(m_agent, w_agent, env, n_controlled_robots, key)
+print(time.time()-a)
