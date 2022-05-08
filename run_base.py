@@ -1,5 +1,8 @@
 import time
 from argparse import ArgumentParser
+import os
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 import gym
 import jax
@@ -19,10 +22,7 @@ def info_to_log(info):
         'manager/goal': info['manager_weighted_rw'][0],
         'manager/ball_grad': info['manager_weighted_rw'][1],
         'manager/move': info['manager_weighted_rw'][2],
-        # 'manager/collision': info['manager_weighted_rw'][3],
         'manager/energy': info['manager_weighted_rw'][4],
-        # 'worker/dist': info['workers_weighted_rw'][0][0],
-        # 'worker/energy': info['workers_weighted_rw'][0][1],
     }
 
 
@@ -31,7 +31,7 @@ def run_validation_ep(agent, env, opponent_policies):
     done = False
     while not done:
         action = agent.get_action(obs)
-        action = np.array(action.reshape((-1,2)))
+        action = np.array(action.reshape((-1, 2)))
         step_action = np.concatenate(
             [action] + [[p()] for p in opponent_policies], axis=0
         )
@@ -48,14 +48,19 @@ def main(args):
         monitor_gym=args.wandb_monitor_gym,
         config=args,
     )
-    total_training_steps = (args.training_total_steps * args.training_exp_grad_ratio) + args.training_replay_min_size
-    replay_capacity = args.training_total_steps + args.training_replay_min_size
+    total_training_steps = args.training_total_steps
+    replay_capacity = args.training_total_steps
     min_replay_size = args.training_replay_min_size
     batch_size = args.training_batch_size
-    gamma = args.training_gamma
+    gamma_m = args.training_gamma_manager
+    sigma_m = args.training_noise_sigma_manager
     learning_rate_actor = args.training_learning_rate_actor
     learning_rate_critic = args.training_learning_rate_critic
     seed = args.seed
+    n_controlled_robots = 1
+    nsteps_per_grad = args.training_nsteps_per_grad
+    ngrad_per_update = args.training_ngrads_per_update
+    val_frequency = args.training_val_frequency
 
     env = gym.make(
         args.env_name,
@@ -76,56 +81,72 @@ def main(args):
         )
     key = jax.random.PRNGKey(seed)
     if args.env_opponent_policy == 'off':
-        opponent_policies = [
-            lambda: np.array([0.0, 0.0]) for _ in range(5)
-        ]
+        opponent_policies = [lambda: np.array([0.0, 0.0]) for _ in range(5)]
     env.set_key(key)
     val_env.set_key(key) if args.training_val_frequency else None
 
     m_observation_space, m_action_space = env.get_spaces_m()
     w_observation_space, w_action_space = env.get_spaces_w()
-    w_action_space = gym.spaces.Box(
-        low=-1,
-        high=1,
-        shape=(2,),
-        dtype=np.float32,
-    )
 
-    agent = DDPG(m_observation_space, w_action_space, learning_rate_actor, learning_rate_critic, gamma, seed)
+    agent = DDPG(
+        m_observation_space,
+        w_action_space,
+        learning_rate_actor,
+        learning_rate_critic,
+        gamma_m,
+        seed,
+        sigma_m,
+    )
     buffer = ReplayBuffer(m_observation_space, w_action_space, replay_capacity)
+
+    @jax.jit
+    def random_w_action(k):
+        k1, k2 = jax.random.split(k, 2)
+        return k1, jax.random.uniform(k2, shape=(n_controlled_robots, 2))
 
     obs = env.reset()
     rewards, ep_steps, n_grads, done, q_losses, pi_losses = 0, 0, 0, False, [], []
     for step in tqdm(range(total_training_steps), smoothing=0.01):
-        if args.training_val_frequency and step % (args.training_val_frequency * args.training_exp_grad_ratio) == 0:
+        buffering = step < min_replay_size
+
+        if val_frequency and not buffering and step % val_frequency == 0:
             run_validation_ep(agent, val_env, opponent_policies)
 
-        action = np.array(agent.sample_action(obs)) if step >= min_replay_size else w_action_space.sample()
-        
+        if buffering:
+            key, action = random_w_action(key)
+            action = np.array(action)
+        else:
+            action = np.array(agent.sample_action(obs))
+
         step_action = np.concatenate(
-            [action.reshape((-1,2))] + [[p()] for p in opponent_policies], axis=0
+            [action.reshape((-1, 2))] + [[p()] for p in opponent_policies], axis=0
         )
 
         _obs, reward, done, info = env.step(step_action)
         terminal_state = False if not done or "TimeLimit.truncated" in info else True
-        buffer.add(obs, action, 0.0, reward.manager, terminal_state, _obs.manager)
+        buffer.add(obs, action, reward.manager, terminal_state, _obs.manager)
 
         rewards += reward.manager
         ep_steps += 1
         if step >= min_replay_size:
-            if step % args.training_exp_grad_ratio == 0:
-                batch = buffer.get_batch(batch_size)
-                act_loss, crt_loss = agent.update(batch)
-                pi_losses.append(act_loss)
-                q_losses.append(crt_loss)
-                n_grads += 1
+            if step % nsteps_per_grad == 0:
+                for i in range(ngrad_per_update):
+                    batch = buffer.get_batch(batch_size)
+                    act_loss, crt_loss = agent.update(batch)
+                    pi_losses.append(act_loss)
+                    q_losses.append(crt_loss)
+                    n_grads += 1
 
         obs = _obs.manager
         if done:
             log = info_to_log(info)
             log.update(dict(ep_reward=rewards, ep_steps=ep_steps))
             if len(q_losses):
-                log.update(q_loss=sum(q_losses) / len(q_losses), pi_loss=sum(pi_losses) / len(pi_losses), n_grads=n_grads)
+                log.update(
+                    q_loss=sum(q_losses) / len(q_losses),
+                    pi_loss=sum(pi_losses) / len(pi_losses),
+                    n_grads=n_grads,
+                )
             wandb.log(log, step=step)
             obs = env.reset()
             rewards, ep_steps, q_losses, pi_losses = 0, 0, [], []
@@ -140,13 +161,13 @@ def main(args):
 
 if __name__ == '__main__':
     # Creates a virtual display for OpenAI gym
-    pyvirtualdisplay.Display(visible=0, size=(1400, 900)).start()
+    # pyvirtualdisplay.Display(visible=0, size=(1400, 900)).start()
 
     parser = ArgumentParser(fromfile_prefix_chars='@')
 
     # EXPERIMENT
     parser.add_argument('--experiment-type', type=str, default='not-set')
-    
+
     # RANDOM
     parser.add_argument('--seed', type=int, default=0)
 
@@ -167,12 +188,16 @@ if __name__ == '__main__':
     parser.add_argument('--training-total-steps', type=int, default=5000000)
     parser.add_argument('--training-replay-min-size', type=int, default=100000)
     parser.add_argument('--training-batch-size', type=int, default=256)
-    parser.add_argument('--training-gamma', type=float, default=0.95)
+    parser.add_argument('--training-gamma-manager', type=float, default=0.95)
+    parser.add_argument('--training-gamma-worker', type=float, default=0.95)
     parser.add_argument('--training-learning-rate-actor', type=float, default=1e-4)
     parser.add_argument('--training-learning-rate-critic', type=float, default=1e-4)
     parser.add_argument('--training-val-frequency', type=int, default=250000)
     parser.add_argument('--training-load-worker', type=bool, default=True)
-    parser.add_argument('--training-exp-grad-ratio', type=int, default=1)
+    parser.add_argument('--training-nsteps-per-grad', type=int, default=1)
+    parser.add_argument('--training-ngrads-per-update', type=int, default=1)
+    parser.add_argument('--training-noise-sigma-manager', type=float, default=0.2)
+    parser.add_argument('--training-noise-sigma-worker', type=float, default=0.2)
 
     args = parser.parse_args()
     main(args)
