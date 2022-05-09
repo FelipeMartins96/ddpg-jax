@@ -9,6 +9,7 @@ import jax
 import numpy as np
 import pyvirtualdisplay
 import rsoccer_gym
+import rsoccer_gym.experimental
 import wandb
 from flax.training import checkpoints
 from tqdm import tqdm
@@ -179,22 +180,22 @@ if __name__ == '__main__':
     parser.add_argument('--wandb-monitor-gym', type=bool, default=True)
 
     # ENVIRONMENT
-    parser.add_argument('--env-name', type=str, default='VSSHRL-v0')
+    parser.add_argument('--env-name', type=str, default='VSSHRL-v5')
     parser.add_argument('--env-n-robots-blue', type=int, default=1)
     parser.add_argument('--env-n-robots-yellow', type=int, default=0)
     parser.add_argument('--env-opponent-policy', type=str, default='off')
 
     # TRAINING
-    parser.add_argument('--training-total-steps', type=int, default=5000000)
+    parser.add_argument('--training-total-steps', type=int, default=20000000)
     parser.add_argument('--training-replay-min-size', type=int, default=100000)
-    parser.add_argument('--training-batch-size', type=int, default=256)
+    parser.add_argument('--training-batch-size', type=int, default=64)
     parser.add_argument('--training-gamma-manager', type=float, default=0.95)
     parser.add_argument('--training-gamma-worker', type=float, default=0.95)
     parser.add_argument('--training-learning-rate-actor', type=float, default=1e-4)
-    parser.add_argument('--training-learning-rate-critic', type=float, default=1e-4)
+    parser.add_argument('--training-learning-rate-critic', type=float, default=2e-4)
     parser.add_argument('--training-val-frequency', type=int, default=250000)
     parser.add_argument('--training-load-worker', type=bool, default=True)
-    parser.add_argument('--training-nsteps-per-grad', type=int, default=1)
+    parser.add_argument('--training-nsteps-per-grad', type=int, default=10)
     parser.add_argument('--training-ngrads-per-update', type=int, default=1)
     parser.add_argument('--training-noise-sigma-manager', type=float, default=0.2)
     parser.add_argument('--training-noise-sigma-worker', type=float, default=0.2)
