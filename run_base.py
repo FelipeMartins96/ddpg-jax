@@ -58,7 +58,7 @@ def main(args):
     learning_rate_actor = args.training_learning_rate_actor
     learning_rate_critic = args.training_learning_rate_critic
     seed = args.seed
-    n_controlled_robots = 1
+    n_controlled_robots = args.env_n_robots_blue
     nsteps_per_grad = args.training_nsteps_per_grad
     ngrad_per_update = args.training_ngrads_per_update
     val_frequency = args.training_val_frequency
@@ -82,28 +82,25 @@ def main(args):
         )
     key = jax.random.PRNGKey(seed)
     if args.env_opponent_policy == 'off':
-        opponent_policies = [lambda: np.array([0.0, 0.0]) for _ in range(5)]
+        opponent_policies = [lambda: np.array([0.0, 0.0]) for _ in range(args.env_n_robots_yellow)]
     env.set_key(key)
     val_env.set_key(key) if args.training_val_frequency else None
 
-    m_observation_space, m_action_space = env.get_spaces_m()
-    w_observation_space, w_action_space = env.get_spaces_w()
-
     agent = DDPG(
-        m_observation_space,
-        w_action_space,
+        env.observation_space,
+        env.action_space,
         learning_rate_actor,
         learning_rate_critic,
         gamma_m,
         seed,
         sigma_m,
     )
-    buffer = ReplayBuffer(m_observation_space, w_action_space, replay_capacity)
+    buffer = ReplayBuffer(env.observation_space, env.action_space, replay_capacity)
 
     @jax.jit
-    def random_w_action(k):
+    def random_action(k):
         k1, k2 = jax.random.split(k, 2)
-        return k1, jax.random.uniform(k2, shape=(n_controlled_robots, 2))
+        return k1, jax.random.uniform(k2, shape=(n_controlled_robots*2,))
 
     obs = env.reset()
     rewards, ep_steps, n_grads, done, q_losses, pi_losses = 0, 0, 0, False, [], []
@@ -114,7 +111,7 @@ def main(args):
             run_validation_ep(agent, val_env, opponent_policies)
 
         if buffering:
-            key, action = random_w_action(key)
+            key, action = random_action(key)
             action = np.array(action)
         else:
             action = np.array(agent.sample_action(obs))
@@ -122,7 +119,6 @@ def main(args):
         step_action = np.concatenate(
             [action.reshape((-1, 2))] + [[p()] for p in opponent_policies], axis=0
         )
-
         _obs, reward, done, info = env.step(step_action)
         terminal_state = False if not done or "TimeLimit.truncated" in info else True
         buffer.add(obs, action, reward.manager, terminal_state, _obs.manager)
@@ -162,7 +158,7 @@ def main(args):
 
 if __name__ == '__main__':
     # Creates a virtual display for OpenAI gym
-    pyvirtualdisplay.Display(visible=0, size=(1400, 900)).start()
+    pyvirtualdisplay. (visible=0, size=(1400, 900)).start()
 
     parser = ArgumentParser(fromfile_prefix_chars='@')
 
