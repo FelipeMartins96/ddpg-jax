@@ -86,16 +86,6 @@ def main(args):
     env.set_key(key)
     val_env.set_key(key) if args.training_val_frequency else None
 
-    agent = DDPG(
-        env.observation_space,
-        env.action_space,
-        learning_rate_actor,
-        learning_rate_critic,
-        gamma_m,
-        seed,
-        sigma_m,
-    )
-
     # Non hiearquical needs to cotrol all blue robots, 
     # w_action space is for only one robot and env action space is for blue and yellow robots
     action_space = gym.spaces.Box(
@@ -104,6 +94,17 @@ def main(args):
         shape=((args.env_n_robots_blue) * 2,),
         dtype=np.float32,
     )
+
+    agent = DDPG(
+        env.observation_space,
+        action_space,
+        learning_rate_actor,
+        learning_rate_critic,
+        gamma_m,
+        seed,
+        sigma_m,
+    )
+
     buffer = ReplayBuffer(env.observation_space, action_space, replay_capacity)
 
     @jax.jit
