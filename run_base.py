@@ -77,7 +77,7 @@ def main(args):
                 n_robots_yellow=args.env_n_robots_yellow,
                 hierarchical=False,
             ),
-            './monitor/',
+            f'./monitor/{args.wandb_name}/',
             episode_trigger=lambda x: True,
         )
     key = jax.random.PRNGKey(seed)
@@ -162,7 +162,7 @@ def main(args):
 
 if __name__ == '__main__':
     # Creates a virtual display for OpenAI gym
-    # pyvirtualdisplay.Display(visible=0, size=(1400, 900)).start()
+    pyvirtualdisplay.Display(visible=0, size=(1400, 900)).start()
 
     parser = ArgumentParser(fromfile_prefix_chars='@')
 
