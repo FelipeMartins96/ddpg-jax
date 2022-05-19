@@ -93,6 +93,7 @@ def main(args):
         dtype=np.float32,
     )
 
+    w_obs_space, w_action_space = env.get_spaces_w()
     if args.env_opponent_policy == 'off':
         opponent_policies = [lambda: np.array([0.0, 0.0]) for _ in range(args.env_n_robots_yellow)]
     if args.env_opponent_policy == 'ou':
