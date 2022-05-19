@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 from agent import DDPG
 from buffer import ReplayBuffer
-
+from rsoccer_gym.Utils import OrnsteinUhlenbeckAction
 
 def info_to_log(info):
     return {
@@ -53,11 +53,12 @@ def main(args):
     replay_capacity = args.training_total_steps
     min_replay_size = args.training_replay_min_size
     batch_size = args.training_batch_size
-    gamma_m = args.training_gamma_manager
-    sigma_m = args.training_noise_sigma_manager
+    gamma = args.training_gamma
+    sigma = args.training_noise_sigma
     learning_rate_actor = args.training_learning_rate_actor
     learning_rate_critic = args.training_learning_rate_critic
     seed = args.seed
+
     n_controlled_robots = args.env_n_robots_blue
     nsteps_per_grad = args.training_nsteps_per_grad
     ngrad_per_update = args.training_ngrads_per_update
@@ -81,9 +82,6 @@ def main(args):
             episode_trigger=lambda x: True,
         )
     key = jax.random.PRNGKey(seed)
-    if args.env_opponent_policy == 'off':
-        opponent_policies = [lambda: np.array([0.0, 0.0]) for _ in range(args.env_n_robots_yellow)]
-    env.set_key(key)
     val_env.set_key(key) if args.training_val_frequency else None
 
     # Non hiearquical needs to cotrol all blue robots, 
@@ -95,14 +93,22 @@ def main(args):
         dtype=np.float32,
     )
 
+    if args.env_opponent_policy == 'off':
+        opponent_policies = [lambda: np.array([0.0, 0.0]) for _ in range(args.env_n_robots_yellow)]
+    if args.env_opponent_policy == 'ou':
+        ou_acts = [OrnsteinUhlenbeckAction(w_action_space) for _ in range(args.env_n_robots_yellow)]
+        [x.reset() for x in ou_acts]
+        opponent_policies = [x.sample for x in ou_acts]
+    env.set_key(key)
+
     agent = DDPG(
         env.observation_space,
         action_space,
         learning_rate_actor,
         learning_rate_critic,
-        gamma_m,
+        gamma,
         seed,
-        sigma_m,
+        sigma,
     )
 
     buffer = ReplayBuffer(env.observation_space, action_space, replay_capacity)
@@ -119,6 +125,12 @@ def main(args):
 
         if val_frequency and not buffering and step % val_frequency == 0:
             run_validation_ep(agent, val_env, opponent_policies)
+            checkpoints.save_checkpoint(
+                f'./checkpoints/{args.env_name}/{args.wandb_name}',
+                agent.actor_params,
+                step=step,
+                overwrite=True,
+            )
 
         if buffering:
             key, action = random_action(key)
@@ -180,31 +192,28 @@ if __name__ == '__main__':
 
     # WANDB
     parser.add_argument('--wandb-mode', type=str, default='disabled')
-    parser.add_argument('--wandb-project', type=str, default='rsoccer-hrl')
+    parser.add_argument('--wandb-project', type=str, default='w20')
     parser.add_argument('--wandb-entity', type=str, default='felipemartins')
     parser.add_argument('--wandb-name', type=str)
     parser.add_argument('--wandb-monitor-gym', type=bool, default=True)
 
     # ENVIRONMENT
-    parser.add_argument('--env-name', type=str, default='VSSHRL-v5')
+    parser.add_argument('--env-name', type=str, default='msc-v200')
     parser.add_argument('--env-n-robots-blue', type=int, default=1)
-    parser.add_argument('--env-n-robots-yellow', type=int, default=0)
-    parser.add_argument('--env-opponent-policy', type=str, default='off')
+    parser.add_argument('--env-n-robots-yellow', type=int, default=2)
+    parser.add_argument('--env-opponent-policy', type=str, default='ou')
 
     # TRAINING
     parser.add_argument('--training-total-steps', type=int, default=20000000)
     parser.add_argument('--training-replay-min-size', type=int, default=100000)
     parser.add_argument('--training-batch-size', type=int, default=64)
-    parser.add_argument('--training-gamma-manager', type=float, default=0.95)
-    parser.add_argument('--training-gamma-worker', type=float, default=0.95)
+    parser.add_argument('--training-gamma', type=float, default=0.95)
     parser.add_argument('--training-learning-rate-actor', type=float, default=1e-4)
     parser.add_argument('--training-learning-rate-critic', type=float, default=2e-4)
     parser.add_argument('--training-val-frequency', type=int, default=250000)
-    parser.add_argument('--training-load-worker', type=bool, default=True)
     parser.add_argument('--training-nsteps-per-grad', type=int, default=10)
     parser.add_argument('--training-ngrads-per-update', type=int, default=1)
-    parser.add_argument('--training-noise-sigma-manager', type=float, default=0.2)
-    parser.add_argument('--training-noise-sigma-worker', type=float, default=0.2)
+    parser.add_argument('--training-noise-sigma', type=float, default=0.2)
 
     args = parser.parse_args()
     main(args)
