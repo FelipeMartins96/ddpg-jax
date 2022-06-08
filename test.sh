@@ -1,1 +1,0 @@
-python hrl_self.py --wandb-mode disabled --wandb-project vss-baguncinha-selfhrl --wandb-entity robocin --training-batch-size 64 --training-grad-steps 0 --training-replay-min-size 20000 --training-val-frequency 0 --training-steps-grad-ratio 1
