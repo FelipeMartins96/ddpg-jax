@@ -8,5 +8,4 @@ envs.reset()
 actions = envs.action_space.sample()
 
 print(envs.action_space)
-# observations, rewards, dones, infos = envs.step(actions)
 print(envs.step(actions))
