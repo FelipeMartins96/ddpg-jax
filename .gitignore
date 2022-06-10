@@ -4,3 +4,4 @@ monitor
 checkpoints
 wandb
 venv
+gym_recordings
