@@ -13,6 +13,7 @@ MIN_BUFFER = 100000
 N_ENVS = 5
 VAL_FREQ = 25000
 STEPS_IN_EPOCH = 10000
+ENV_NAME = 'msc-v241'
 
 class Logger:
     def __init__(self, steps_in_epoch=1000):
@@ -30,10 +31,12 @@ class Logger:
         self.epoch_update_dict = {'pi_loss': 0, 'q_loss': 0}
         self.epoch_rsoccer_rws = np.zeros(5, dtype=np.float32)
         self.epoch_rsoccer_raw_rws = np.zeros(5, dtype=np.float32)
+        self.sigma = 0.0
 
-    def add_update_info(self, pi_loss, q_loss):
+    def add_update_info(self, pi_loss, q_loss, sigma):
         self.epoch_update_dict['pi_loss'] += pi_loss
         self.epoch_update_dict['q_loss'] += q_loss
+        self.sigma += sigma
         self.epoch_updates += 1
 
     def add_ep_infos(self, info):
@@ -75,17 +78,31 @@ class Logger:
         if self.epoch_updates > 0:
             log.update({
             'agent/pi_loss': self.epoch_update_dict['pi_loss'] / self.epoch_updates,
-            'agent/q_loss': self.epoch_update_dict['q_loss'] / self.epoch_updates,})
+            'agent/q_loss': self.epoch_update_dict['q_loss'] / self.epoch_updates,
+            'agent/opponent_sigma': self.sigma / self.epoch_updates})
         wandb.log(log, step=int(self.total_steps))
 
         self.reset_epoch()
 
+def mirror(obs):
+    mirror_entity = np.array([-1, -1, -1, -1, -1, -1, 1])
+    _obs = obs.reshape((-1,18))
+    mirrored = np.zeros_like(_obs)
+    mirrored[:, :4] = -_obs[:, :4]
+    mirrored[:, 4:11] = _obs[:, 11:18] * mirror_entity 
+    mirrored[:, 11:18] = _obs[:, 4:11] * mirror_entity
+    return mirrored
 
-def run_validation_ep(agent, env):
+
+def run_validation_ep(agent, opponent, env):
     obs = env.reset()
     done = False
     while not done:
-        action = np.asarray(agent.get_action(obs))
+        action = env.action_space.sample()
+        agent_action = np.asarray(agent.get_action(obs))
+        opponent_action = np.asarray(opponent.get_action(mirror(obs)))
+        action[:2] = agent_action
+        action[2:4] = opponent_action
         _obs, _, done, _ = env.step(action)
         obs = _obs
 
@@ -97,26 +114,50 @@ if __name__ == '__main__':
         monitor_gym=True,
     )
 
-    envs = gym.vector.make("msc-v240", num_envs=N_ENVS, asynchronous=True)
+    envs = gym.vector.make(ENV_NAME, num_envs=N_ENVS, asynchronous=True)
     envs = RecordEpisodeStatistics(envs)
     envs = VectorListInfo(envs)
-    val_env = gym.make("msc-v240")
+    val_env = gym.make(ENV_NAME)
     val_env = RecordVideo(
         val_env, video_folder="gym_recordings", episode_trigger=lambda x: True
     )
 
     agent = DDPG(
         obs_space=envs.single_observation_space,
-        act_space=envs.single_action_space,
+        act_space=gym.spaces.Box(
+            low=-1.0,
+            high=1.0,
+            shape=(2,),
+            dtype=np.float32),
         lr_c=2e-4,
         lr_a=1e-4,
         gamma=0.95,
         seed=0,
         sigma=0.2,
     )
+
+    opponent = DDPG(
+        obs_space=envs.single_observation_space,
+        act_space=gym.spaces.Box(
+            low=-1.0,
+            high=1.0,
+            shape=(2,),
+            dtype=np.float32),
+        lr_c=2e-4,
+        lr_a=1e-4,
+        gamma=0.95,
+        seed=0,
+        sigma=0.0,
+    )
+    opponent.actor_params = checkpoints.restore_checkpoint(ckpt_dir='./checkpoints/msc-v241-pretrain', target=opponent.actor_params)
+
     buffer = ReplayBuffer(
         env_observation_space=envs.single_observation_space,
-        env_action_space=envs.single_action_space,
+        env_action_space=gym.spaces.Box(
+            low=-1.0,
+            high=1.0,
+            shape=(2,),
+            dtype=np.float32),
         capacity=ENVIRONMENT_STEPS,
     )
     logger = Logger(steps_in_epoch=STEPS_IN_EPOCH)
@@ -126,18 +167,20 @@ if __name__ == '__main__':
         buffering = buffer.size < MIN_BUFFER
 
         if VAL_FREQ and not buffering and step % VAL_FREQ == 0:
-            run_validation_ep(agent, val_env)
+            run_validation_ep(agent, opponent, val_env)
             checkpoints.save_checkpoint(
-                f'./checkpoints/',
+                f'./checkpoints/{ENV_NAME}/',
                 agent.actor_params,
                 step=step,
                 overwrite=True,
             )
 
+        actions = envs.action_space.sample().reshape((N_ENVS, 2, -1))
+        actions[:, 1] = np.array(opponent.sample_action(mirror(obs)))
         if not buffering:
-            actions = np.array(agent.sample_action(obs))
-        else:
-            actions = envs.action_space.sample()
+            agent_actions = np.array(agent.sample_action(obs))
+            actions[:, 0] = agent_actions
+        actions = actions.reshape((N_ENVS, -1))
 
         n_obs, rewards, dones, infos = envs.step(actions)
         for i in range(N_ENVS):
@@ -145,15 +188,27 @@ if __name__ == '__main__':
             _obs = n_obs[i]
             if dones[i]:
                 logger.add_ep_infos(infos[i])
+                goal_rw = infos[i]['rewards'][0]
+                if goal_rw < 0:
+                    opponent.sigma = np.clip(opponent.sigma + 0.001, 0, 1)
+                if goal_rw > 0:
+                    opponent.sigma = np.clip(opponent.sigma - 0.001, 0, 1)
                 if "TimeLimit.truncated" in infos[i]:
                     terminal_state = False
                     _obs = infos[i]['terminal_observation']
                 
-            buffer.add(obs[i], actions[i], rewards[i], terminal_state, _obs)
+            buffer.add(obs[i], actions[i][:2], rewards[i], terminal_state, _obs)
 
         if buffer.size >= MIN_BUFFER:
             batch = buffer.get_batch(64)
             pi_loss, q_loss = agent.update(batch)
-            logger.add_update_info(pi_loss, q_loss)
+            logger.add_update_info(pi_loss, q_loss, opponent.sigma)
 
         obs = n_obs
+
+    checkpoints.save_checkpoint(
+        f'./checkpoints/{ENV_NAME}/',
+        agent.actor_params,
+        step=int(ENVIRONMENT_STEPS/N_ENVS),
+        overwrite=True,
+    )
