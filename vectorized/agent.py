@@ -5,15 +5,27 @@ import jax.numpy as jnp
 
 
 def get_sample_action(act_model):
-    def sample(k, params, sigma, obs):
+    def sample(k, params, state, sigma, theta, obs):
         key, k = jax.random.split(k)
         act = act_model.apply(params, obs)
         noise = jax.random.normal(key=k, shape=act.shape) * sigma
         act = jnp.clip(act + noise, -1, 1)
-        return key, act
+        return key, noise, act
 
     return jax.jit(sample)
 
+
+def get_sample_action_ou(act_model):
+    def sample(k, params, state, sigma, theta, obs):
+        key, k = jax.random.split(k)
+        act = act_model.apply(params, obs)
+        noise = jax.random.normal(key=k, shape=act.shape)
+        noise = state + theta * - state + sigma * noise
+        noise = jnp.clip(noise, -2, 2)
+        act = jnp.clip(act + noise, -1, 1)
+        return key, noise, act
+
+    return jax.jit(sample)
 
 def get_update(act_model, crt_model, optimizer_a, optimizer_c, gamma, tau):
     def critic_loss(
@@ -84,7 +96,7 @@ def get_update(act_model, crt_model, optimizer_a, optimizer_c, gamma, tau):
 
 
 class DDPG:
-    def __init__(self, obs_space, act_space, lr_c, lr_a, gamma, seed, sigma):
+    def __init__(self, obs_space, act_space, lr_c, lr_a, gamma, seed, sigma, theta=0.15, ou=False):
         self.key = jax.random.PRNGKey(seed)
         self.key, k0, k1 = jax.random.split(self.key, 3)
         act_size = act_space.shape[0]
@@ -97,6 +109,8 @@ class DDPG:
         self.tgt_actor_params = self.actor_params
         self.tgt_critic_params = self.critic_params
         self.sigma = jnp.array(sigma)
+        self.theta = jnp.array(theta)
+        self.noise_state = jnp.zeros_like(act_space.sample())
 
         # Optimizers
         optimizer_c = optax.chain(
@@ -110,12 +124,12 @@ class DDPG:
         self.act_opt_params = optimizer_c.init(self.actor_params)
         self.crt_opt_params = optimizer_a.init(self.critic_params)
 
-        self._sample_action = get_sample_action(self.actor)
+        self._sample_action = get_sample_action(self.actor) if not ou else get_sample_action_ou(self.actor)
         self._update = get_update(self.actor, self.critic, optimizer_c, optimizer_a, gamma, 0.005)
         self._get_action = jax.jit(self.actor.apply)
 
     def sample_action(self, obs):
-        self.key, action = self._sample_action(self.key, self.actor_params, self.sigma, obs)
+        self.key, self.state, action = self._sample_action(self.key, self.actor_params, self.noise_state, self.sigma, self.theta, obs)
         return action
 
     def get_action(self, obs):
