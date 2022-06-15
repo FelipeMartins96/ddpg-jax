@@ -4,8 +4,8 @@ import optax
 import jax.numpy as jnp
 
 
-def get_sample_action(act_model, sigma):
-    def sample(k, params, obs):
+def get_sample_action(act_model):
+    def sample(k, params, sigma, obs):
         key, k = jax.random.split(k)
         act = act_model.apply(params, obs)
         noise = jax.random.normal(key=k, shape=act.shape) * sigma
@@ -96,7 +96,7 @@ class DDPG:
         )
         self.tgt_actor_params = self.actor_params
         self.tgt_critic_params = self.critic_params
-        self.sigma = sigma
+        self.sigma = jnp.array(sigma)
 
         # Optimizers
         optimizer_c = optax.chain(
@@ -110,12 +110,12 @@ class DDPG:
         self.act_opt_params = optimizer_c.init(self.actor_params)
         self.crt_opt_params = optimizer_a.init(self.critic_params)
 
-        self._sample_action = get_sample_action(self.actor, self.sigma)
+        self._sample_action = get_sample_action(self.actor)
         self._update = get_update(self.actor, self.critic, optimizer_c, optimizer_a, gamma, 0.005)
         self._get_action = jax.jit(self.actor.apply)
 
     def sample_action(self, obs):
-        self.key, action = self._sample_action(self.key, self.actor_params, obs)
+        self.key, action = self._sample_action(self.key, self.actor_params, self.sigma, obs)
         return action
 
     def get_action(self, obs):
