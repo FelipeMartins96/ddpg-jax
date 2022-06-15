@@ -21,7 +21,6 @@ def get_sample_action_ou(act_model):
         act = act_model.apply(params, obs)
         noise = jax.random.normal(key=k, shape=act.shape)
         noise = state + theta * - state + sigma * noise
-        noise = jnp.clip(noise, -2, 2)
         act = jnp.clip(act + noise, -1, 1)
         return key, noise, act
 
@@ -129,7 +128,7 @@ class DDPG:
         self._get_action = jax.jit(self.actor.apply)
 
     def sample_action(self, obs):
-        self.key, self.state, action = self._sample_action(self.key, self.actor_params, self.noise_state, self.sigma, self.theta, obs)
+        self.key, self.noise_state, action = self._sample_action(self.key, self.actor_params, self.noise_state, self.sigma, self.theta, obs)
         return action
 
     def get_action(self, obs):
