@@ -13,7 +13,7 @@ MIN_BUFFER = 100000
 N_ENVS = 5
 VAL_FREQ = 25000
 STEPS_IN_EPOCH = 10000
-ENV_NAME = 'msc-v241'
+ENV_NAME = 'msc-v242'
 
 class Logger:
     def __init__(self, steps_in_epoch=1000):

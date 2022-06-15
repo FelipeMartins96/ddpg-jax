@@ -147,7 +147,9 @@ if __name__ == '__main__':
         lr_a=1e-4,
         gamma=0.95,
         seed=0,
-        sigma=0.0,
+        sigma=0.8,
+        theta=0.15,
+        ou=True
     )
     opponent.actor_params = checkpoints.restore_checkpoint(ckpt_dir='./checkpoints/msc-v241-pretrain', target=opponent.actor_params)
 
@@ -190,9 +192,9 @@ if __name__ == '__main__':
                 logger.add_ep_infos(infos[i])
                 goal_rw = infos[i]['rewards'][0]
                 if goal_rw < 0:
-                    opponent.sigma = np.clip(opponent.sigma + 0.001, 0, 1)
+                    opponent.sigma = np.clip(opponent.sigma + 0.001, 0, 1.4)
                 if goal_rw > 0:
-                    opponent.sigma = np.clip(opponent.sigma - 0.001, 0, 1)
+                    opponent.sigma = np.clip(opponent.sigma - 0.001, 0, 1.4)
                 if "TimeLimit.truncated" in infos[i]:
                     terminal_state = False
                     _obs = infos[i]['terminal_observation']
