@@ -40,8 +40,7 @@ class Logger:
         self.epoch_updates += 1
 
     def add_ep_infos(self, info, agent):
-        if 'rewards' in info:
-            self.epoch_rsoccer_rws += info[f'rewards-{agent}']
+        self.epoch_rsoccer_rws += info[f'rewards-{agent}']
         
         self.epoch_steps += info['episode']['l']
         self.epoch_rw_sum += self.epoch_rsoccer_rws.sum()
@@ -97,7 +96,6 @@ if __name__ == '__main__':
         project='msc-w25',
         entity='felipemartins',
         monitor_gym=True,
-        mode='disabled'
     )
 
     envs = gym.vector.make(ENV_NAME, num_envs=N_ENVS, asynchronous=True)
@@ -128,7 +126,7 @@ if __name__ == '__main__':
         lr_a=1e-4,
         gamma=0.95,
         seed=0,
-        sigma=0.8,
+        sigma=0.7,
         theta=0.15,
         ou=True
     )
@@ -168,7 +166,8 @@ if __name__ == '__main__':
             for agt in blue_agents:
                 _obs = n_obs[agt][i]
                 if dones[i]:
-                    logger.add_ep_infos(infos[i], agt)
+                    if '0' in agt:
+                        logger.add_ep_infos(infos[i], agt)
                     if "TimeLimit.truncated" in infos[i]:
                         terminal_state = False
                         _obs = infos[i]['terminal_observation'][agt]
