@@ -8,7 +8,7 @@ import numpy as np
 from tqdm import tqdm
 from flax.training import checkpoints
 
-ENVIRONMENT_STEPS= int(5e6)
+ENVIRONMENT_STEPS= int(1e7)
 MIN_BUFFER = 100000
 N_ENVS = 5
 VAL_FREQ = 25000
@@ -83,9 +83,9 @@ def run_validation_ep(agent, opponent, env):
     while not done:
         action = {}
         for agt in env.agents:
-            if 'b' in agt:
+            if agt == 'b_0':
                 action[agt] = np.asarray(agent.get_action(obs[agt]))
-            if 'y' in agt:
+            else:
                 action[agt] = env.action_space[agt].sample()
         _obs, _, done, _ = env.step(action)
         obs = _obs
@@ -135,7 +135,7 @@ if __name__ == '__main__':
     buffer = ReplayBuffer(
         env_observation_space=envs.single_observation_space['b_0'],
         env_action_space=envs.single_action_space['b_0'],
-        capacity=ENVIRONMENT_STEPS,
+        capacity=ENVIRONMENT_STEPS/2,
     )
     logger = Logger(steps_in_epoch=STEPS_IN_EPOCH)
 
@@ -154,25 +154,25 @@ if __name__ == '__main__':
 
         actions = {}
         for agt in agents:
-            if 'b' in agt:
+            if agt == 'b_0':
                 actions[agt] = np.asarray(agent.sample_action(obs[agt])) if not buffering else envs.action_space[agt].sample()
-            if 'y' in agt:
+            else:
                 actions[agt] = envs.action_space[agt].sample()
 
         n_obs, rewards, dones, infos = envs.step(actions)
 
         for i in range(N_ENVS):
             terminal_state = dones[i]
-            for agt in blue_agents:
-                _obs = n_obs[agt][i]
-                if dones[i]:
-                    if '0' in agt:
-                        logger.add_ep_infos(infos[i], agt)
-                    if "TimeLimit.truncated" in infos[i]:
-                        terminal_state = False
-                        _obs = infos[i]['terminal_observation'][agt]
-                    
-                buffer.add(obs[agt][i], actions[agt][i], infos[i][f'{agt}-rw'], terminal_state, _obs)
+            agt = 'b_0'
+            _obs = n_obs[agt][i]
+            if dones[i]:
+                if '0' in agt:
+                    logger.add_ep_infos(infos[i], agt)
+                if "TimeLimit.truncated" in infos[i]:
+                    terminal_state = False
+                    _obs = infos[i]['terminal_observation'][agt]
+                
+            buffer.add(obs[agt][i], actions[agt][i], infos[i][f'{agt}-rw'], terminal_state, _obs)
             goal_rw = infos[i][f'rewards-b_0'][0]
             # if goal_rw < 0:
             #     opponent.sigma = np.clip(opponent.sigma + 0.001, 0, 1.4)
