@@ -135,7 +135,7 @@ if __name__ == '__main__':
     buffer = ReplayBuffer(
         env_observation_space=envs.single_observation_space['b_0'],
         env_action_space=envs.single_action_space['b_0'],
-        capacity=ENVIRONMENT_STEPS/2,
+        capacity=int(ENVIRONMENT_STEPS/2),
     )
     logger = Logger(steps_in_epoch=STEPS_IN_EPOCH)
 
