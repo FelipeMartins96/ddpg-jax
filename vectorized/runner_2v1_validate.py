@@ -8,7 +8,7 @@ import numpy as np
 from tqdm import tqdm
 from flax.training import checkpoints
 
-VALIDATION_EPS= 50
+VALIDATION_EPS= 100
 ENV_NAME = 'msc-v251'
 
 class Logger:
@@ -76,6 +76,7 @@ class Logger:
 def run_validation_ep(agent, opponent, env):
     obs = env.reset()
     done = False
+    steps = 0
     while not done:
         action = {}
         for agt in env.agents:
@@ -84,15 +85,16 @@ def run_validation_ep(agent, opponent, env):
             if 'y' in agt:
                 action[agt] = np.asarray(opponent.get_action(obs[agt]))
         _obs, _, done, infos = env.step(action)
+        steps += 1
         obs = _obs
-    print(infos)
+    infos.update({'ep_steps': steps})
+    return infos
 
 if __name__ == '__main__':
     wandb.init(
         project='msc-w25',
         entity='felipemartins',
         monitor_gym=True,
-        mode='disabled'
     )
 
     val_env = gym.make(ENV_NAME)
@@ -125,8 +127,32 @@ if __name__ == '__main__':
         ou=False
     )
     opponent.actor_params = checkpoints.restore_checkpoint(ckpt_dir='./checkpoints/msc-v250-pretrain', target=opponent.actor_params)
-    agent.actor_params = checkpoints.restore_checkpoint(ckpt_dir='./checkpoints/msc-v250-pretrain', target=agent.actor_params)
+    agent.actor_params = checkpoints.restore_checkpoint(ckpt_dir='./checkpoints/msc-v251-dynamic', target=agent.actor_params)
 
-
+    np.random.seed(0)
+    rws = None
+    ep_steps = 0
+    goals_blue, goals_yellow, tie = 0, 0, 0
     for step in tqdm(range(int(VALIDATION_EPS)), smoothing=0.01):
-        run_validation_ep(agent, opponent, val_env)
+        infos = run_validation_ep(agent, opponent, val_env)
+        if rws is None:
+            rws = infos['rewards-b_0']
+        else:
+            rws += infos['rewards-b_0']
+        ep_steps += infos['ep_steps']
+        goals_blue += 1 if infos['rewards-b_0'][0] == 1 else 0
+        goals_yellow += 1 if infos['rewards-b_0'][0] == -1 else 0
+        tie += 1 if infos['rewards-b_0'][0] == 0 else 0
+    wandb.log({
+        'validation/total_eps': VALIDATION_EPS,
+        'validation/goal': rws[0] / VALIDATION_EPS,
+        'validation/ball_grad': rws[1] / VALIDATION_EPS,
+        'validation/move': rws[2] / VALIDATION_EPS,
+        'validation/collision': rws[3] / VALIDATION_EPS,
+        'validation/energy': rws[4] / VALIDATION_EPS,
+        'validation/total_rw': np.sum(rws) / VALIDATION_EPS,
+        'validation/ep_steps': ep_steps / VALIDATION_EPS,
+        'validation/goals_blue': goals_blue / VALIDATION_EPS,
+        'validation/goals_yellow': goals_yellow / VALIDATION_EPS,
+        'validation/goals_tie': tie / VALIDATION_EPS,
+        })
